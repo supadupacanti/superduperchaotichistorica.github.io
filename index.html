@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Historica: Mathematical Mayhem</title>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@900&family=Special+Elite&family=Crimson+Pro:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root { --ink: #1a1008; --parchment: #f5edd6; --gold: #c9920a; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Crimson Pro', serif; background: var(--parchment); color: var(--ink); min-height: 100vh; overflow: hidden; }
+        
+        /* Chaotic Answer Buttons */
+        .chaotic-btn {
+            position: absolute; padding: 12px 20px; font-family: 'Special Elite', monospace;
+            background: #e8d9b5; border: 2px solid var(--ink); cursor: pointer; z-index: 20;
+            transition: opacity 0.3s, transform 0.2s;
+        }
+        .vibrate { animation: shake 0.3s infinite; }
+        @keyframes shake { 0% {transform: translate(0,0)} 25% {transform: translate(2px,2px)} 50% {transform: translate(0,0)} 100% {transform: translate(0,0)} }
+        
+        .hint-highlight { border: 5px solid var(--gold) !important; box-shadow: 0 0 25px var(--gold); background: white !important; z-index: 100 !important; }
+
+        /* Logic Gate Box */
+        #logic-gate { 
+            position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%);
+            background: white; padding: 15px; border: 3px solid var(--ink); z-index: 300; width: 350px; text-align: center;
+            box-shadow: 8px 8px 0 var(--gold);
+        }
+
+        .screen { display: none; min-height: 100vh; padding: 20px; flex-direction: column; align-items: center; justify-content: center; position: relative; }
+        .screen.active { display: flex; }
+        .panel { background: rgba(245, 237, 214, 0.98); border: 2px solid #d4c090; padding: 2rem; box-shadow: 0 10px 30px rgba(0,0,0,0.3); width: 90%; max-width: 500px; text-align: center; z-index: 10; }
+        .btn-primary { background: var(--ink); color: white; padding: 1rem; width: 100%; font-family: 'Special Elite'; cursor: pointer; border: none; margin-top: 10px; }
+        
+        /* The Overlay Fix */
+        .waiting-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.95); color: white; display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 500; }
+        .waiting-overlay.active { display: flex; }
+
+        .game-header { position: fixed; top: 0; width: 100%; background: var(--ink); color: white; padding: 10px; display: flex; justify-content: space-between; z-index: 100; }
+        .timer-bar { position: fixed; top: 44px; height: 8px; background: var(--gold); width: 100%; z-index: 100; transition: width 1s linear; }
+        .player-list { list-style: none; text-align: left; margin: 15px 0; width: 100%; }
+        .player-list li { display: flex; justify-content: space-between; padding: 10px; background: #fff; border: 1px solid #ddd; margin-bottom: 5px; }
+    </style>
+</head>
+<body>
+
+<div id="wait-overlay" class="waiting-overlay">
+    <h1 id="wait-title" style="font-family:'Playfair Display'; font-size: 3rem; color: var(--gold);">ERA RECORDED</h1>
+    <p id="wait-status" style="font-family:'Special Elite'; margin-top: 20px;">Synchronizing the timeline...</p>
+</div>
+
+<div id="home-screen" class="screen active">
+    <div class="panel">
+        <h1 style="font-family:'Playfair Display'; font-size: 3rem;">HISTORICA</h1>
+        <button class="btn-primary" onclick="showScreen('host-setup-screen')">HOST ERA</button>
+        <button class="btn-primary" onclick="showScreen('join-screen')" style="background:#444">JOIN ERA</button>
+    </div>
+</div>
+
+<div id="host-setup-screen" class="screen">
+    <div class="panel">
+        <h2>Host Setup</h2>
+        <input type="text" id="host-name-input" placeholder="Name" style="width:100%; padding:12px; margin: 10px 0;">
+        <label>Time Limit (Seconds)</label>
+        <input type="number" id="time-limit-input" value="25" style="width:100%; padding:12px; margin-bottom: 20px;">
+        <button class="btn-primary" onclick="createRoom()">GENERATE ROOM</button>
+    </div>
+</div>
+
+<div id="join-screen" class="screen">
+    <div class="panel">
+        <h2>Join Era</h2>
+        <input type="text" id="join-name-input" placeholder="Name" style="width:100%; padding:12px; margin: 5px 0;">
+        <input type="text" id="join-code-input" placeholder="Room Code" style="width:100%; padding:12px; margin-bottom: 10px; text-transform:uppercase;">
+        <button class="btn-primary" onclick="joinRoom()">ENTER</button>
+    </div>
+</div>
+
+<div id="lobby-screen" class="screen">
+    <div class="panel">
+        <p>ROOM CODE</p>
+        <h1 id="display-room-code" style="color:var(--gold); font-size:4rem;">----</h1>
+        <ul id="player-list" class="player-list"></ul>
+        <button id="start-btn" class="btn-primary" style="display:none" onclick="startGame()">START GAME</button>
+    </div>
+</div>
+
+<div id="game-screen" class="screen">
+    <div class="game-header">
+        <div id="q-count">Q 1/20</div>
+        <div id="score-display">0 pts</div>
+    </div>
+    <div id="timer-bar" class="timer-bar"></div>
+    <div class="panel" style="margin-top:-120px;">
+        <p id="q-text" style="font-size:1.2rem; font-weight:bold;"></p>
+    </div>
+    <div id="chaotic-area"></div>
+    
+    <div id="logic-gate">
+        <p style="font-size:0.7rem;">Solve to unlock answers: <span id="math-q" style="font-weight:bold; color:red;"></span></p>
+        <input type="number" id="math-input" placeholder="?" style="width:60px;" oninput="checkMath(this.value)">
+        <div style="border-top:1px solid #eee; margin-top:5px; padding-top:5px;">
+            <p style="font-size:0.6rem;">Hint! Type: "<span id="hint-word" style="color:blue;"></span>"</p>
+            <input type="text" id="hint-input" placeholder="Long word..." style="width:100%;" oninput="checkHint(this.value)">
+        </div>
+    </div>
+</div>
+
+<div id="leaderboard-screen" class="screen">
+    <div class="panel">
+        <h2 style="font-family:'Playfair Display'">ERA STANDINGS</h2>
+        <ul id="lb-list" class="player-list"></ul>
+        <button id="next-btn" class="btn-primary" style="display:none" onclick="nextQuestion()">NEXT ERA</button>
+        <p id="wait-msg" style="display:none; font-style:italic; margin-top:10px;">Waiting for Host...</p>
+    </div>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { getDatabase, ref, set, onValue, update, get } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+
+    // Firebase configuration from provided screenshot
+    const firebaseConfig = {
+        apiKey: "AIzaSyDW-UE-a4TMRcfz3E13mLOgBtx6bywwCtE",
+        authDomain: "history-780ec.firebaseapp.com",
+        databaseURL: "https://history-780ec-default-rtdb.firebaseio.com",
+        projectId: "history-780ec",
+        storageBucket: "history-780ec.firebasestorage.app",
+        messagingSenderId: "426243337205",
+        appId: "1:426243337205:web:fc7f097a6fa0497297cebc",
+        measurementId: "G-Q1Z3N3BSVB"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    const BANK = [
+        {q:"What 1851 event in London showcased industrial wonders?", a:["Great Exhibition","World's Fair","Expo 51","Victory Gala"], c:0},
+        {q:"Who led the 'Red Shirts' in Italian Unification (1860)?", a:["Garibaldi","Mazzini","Cavour","Victor Emmanuel"], c:0},
+        {q:"Which 1863 decree 'freed' enslaved people in the US?", a:["Emancipation Proclamation","13th Amendment","Gettysburg Address","Civil Rights Act"], c:0},
+        {q:"The Meiji Restoration (1868) happened in which country?", a:["Japan","China","Korea","Siam"], c:0},
+        {q:"What canal opened in 1869 connecting the Med and Red Sea?", a:["Suez","Panama","Erie","Kiel"], c:0},
+        {q:"Alexander Graham Bell patented what in 1876?", a:["Telephone","Radio","Phonograph","Telegraph"], c:0},
+        {q:"The 1884 Berlin Conference partitioned which continent?", a:["Africa","Asia","South America","Oceania"], c:0},
+        {q:"What 1894 affair divided France over antisemitism?", a:["Dreyfus Affair","Napoleonic Trial","Zola Case","Bastille Riot"], c:0},
+        {q:"The Boxer Rebellion (1899) took place where?", a:["China","India","Japan","Philippines"], c:0},
+        {q:"Who discovered Radium in 1898?", a:["Marie Curie","Albert Einstein","Isaac Newton","Max Planck"], c:0},
+        {q:"Which ship sank in 1912 on its maiden voyage?", a:["Titanic","Lusitania","Britannic","Olympic"], c:0},
+        {q:"The Wright Brothers flew in what year?", a:["1903","1899","1910","1890"], c:0},
+        {q:"The Spanish-American War occurred in which year?", a:["1898","1880","1905","1892"], c:0},
+        {q:"Who wrote 'The Communist Manifesto' (1848)?", a:["Karl Marx","Adam Smith","John Locke","Napoleon"], c:0},
+        {q:"What was the first transcontinental railroad finished (US)?", a:["1869","1850","1885","1900"], c:0},
+        {q:"Which Queen ruled Britain from 1837-1901?", a:["Victoria","Elizabeth I","Mary","Anne"], c:0},
+        {q:"What oil company did Rockefeller found in 1870?", a:["Standard Oil","Shell","BP","Exxon"], c:0},
+        {q:"The Russo-Japanese War ended in which year?", a:["1905","1914","1895","1910"], c:0},
+        {q:"Who was the 'Iron Chancellor' of Germany?", a:["Otto von Bismarck","Wilhelm II","Metternich","Hitler"], c:0},
+        {q:"Which artistic movement began in France in the 1870s?", a:["Impressionism","Baroque","Cubism","Surrealism"], c:0}
+    ];
+
+    const LONG_WORDS = ["Antidisestablishmentarianism", "Honorificabilitudinitatibus", "Incomprehensibilities", "Pneumonoultramicroscopicsilicovolcanoconiosis", "Floccinaucinihilipilification"];
+
+    let state = { isHost: false, myId: 'p'+Math.random().toString(36).slice(2, 7), roomCode: '', currentQ: -1, score: 0, timeLimit: 25, canAnswer: false, mathAns: 0, currentHint: "" };
+    let timerRef;
+
+    window.showScreen = (id) => { 
+        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active')); 
+        document.getElementById(id).classList.add('active'); 
+    };
+
+    window.createRoom = async () => {
+        state.timeLimit = parseInt(document.getElementById('time-limit-input').value) || 25;
+        state.roomCode = Math.random().toString(36).substring(2, 6).toUpperCase();
+        state.isHost = true;
+        await set(ref(db, 'rooms/' + state.roomCode), { 
+            status: 'lobby', 
+            currentQ: -1, 
+            questions: BANK.sort(() => Math.random() - 0.5), 
+            timeLimit: state.timeLimit,
+            players: { [state.myId]: { name: document.getElementById('host-name-input').value || 'Host', score: 0, answered: false } } 
+        });
+        setupSync();
+        document.getElementById('display-room-code').textContent = state.roomCode;
+        document.getElementById('start-btn').style.display = 'block';
+        showScreen('lobby-screen');
+    };
+
+    window.joinRoom = async () => {
+        const code = document.getElementById('join-code-input').value.toUpperCase();
+        const snap = await get(ref(db, `rooms/${code}`));
+        if (snap.exists()) {
+            state.roomCode = code; state.timeLimit = snap.val().timeLimit;
+            await update(ref(db, `rooms/${code}/players/${state.myId}`), { name: document.getElementById('join-name-input').value || 'Player', score: 0, answered: false });
+            setupSync();
+            document.getElementById('display-room-code').textContent = code;
+            showScreen('lobby-screen');
+        } else alert("Era not found!");
+    };
+
+    function setupSync() {
+        onValue(ref(db, 'rooms/' + state.roomCode), (snapshot) => {
+            const room = snapshot.val(); if (!room) return;
+            const sorted = Object.values(room.players).sort((a, b) => b.score - a.score);
+            const html = sorted.map(p => `<li><span>${p.name}</span><b>${p.score}</b></li>`).join('');
+            document.getElementById('player-list').innerHTML = html;
+            document.getElementById('lb-list').innerHTML = html;
+
+            if (room.status === 'question' && state.currentQ !== room.currentQ) {
+                state.currentQ = room.currentQ;
+                document.getElementById('wait-overlay').classList.remove('active'); // Ensure overlay is gone
+                renderQuestion();
+            } else if (room.status === 'leaderboard') {
+                clearInterval(timerRef);
+                document.getElementById('wait-overlay').classList.remove('active'); // FIXED: Hide overlay for Host/Players
+                showScreen('leaderboard-screen');
+                if (state.isHost) {
+                    document.getElementById('next-btn').style.display = 'block';
+                    document.getElementById('wait-msg').style.display = 'none';
+                } else {
+                    document.getElementById('wait-msg').style.display = 'block';
+                }
+            }
+            
+            if (state.isHost && room.status === 'question') {
+                if (Object.values(room.players).every(p => p.answered)) update(ref(db, `rooms/${state.roomCode}`), { status: 'leaderboard' });
+            }
+        });
+    }
+
+    window.startGame = () => update(ref(db, `rooms/${state.roomCode}`), { status: 'question', currentQ: 0 });
+
+    function renderQuestion() {
+        const qData = state.questions[state.currentQ];
+        document.getElementById('q-count').innerText = `Q ${state.currentQ + 1}/20`;
+        document.getElementById('q-text').innerText = qData.q;
+        
+        state.canAnswer = false;
+        const n1 = Math.floor(Math.random()*9)+2; const n2 = Math.floor(Math.random()*9)+2;
+        state.mathAns = n1 * n2;
+        document.getElementById('math-q').innerText = `${n1} x ${n2} =`;
+        document.getElementById('math-input').value = "";
+        
+        state.currentHint = LONG_WORDS[Math.floor(Math.random()*LONG_WORDS.length)];
+        document.getElementById('hint-word').innerText = state.currentHint;
+        document.getElementById('hint-input').value = "";
+
+        const area = document.getElementById('chaotic-area');
+        area.innerHTML = '';
+        const choices = qData.a.map((t, i) => ({ t, isC: i === qData.c })).sort(() => Math.random() - 0.5);
+
+        choices.forEach(c => {
+            const btn = document.createElement('button');
+            btn.className = 'chaotic-btn';
+            btn.innerText = c.t;
+            btn.style.left = (Math.random() * 65 + 5) + '%';
+            btn.style.top = (Math.random() * 50 + 20) + '%';
+            btn.style.opacity = "0.05"; 
+            btn.disabled = true;
+
+            // Chaotic Tilting
+            const tilt = (Math.random() - 0.5) * 160; 
+            btn.style.transform = `rotate(${tilt}deg)`;
+            if(Math.random() > 0.7) btn.classList.add('vibrate');
+
+            btn.onclick = () => {
+                if (!state.canAnswer) return;
+                if (c.isC) state.score += 100;
+                update(ref(db, `rooms/${state.roomCode}/players/${state.myId}`), { answered: true, score: state.score });
+                document.getElementById('score-display').innerText = state.score + " pts";
+                document.getElementById('wait-overlay').classList.add('active');
+            };
+            area.appendChild(btn);
+        });
+
+        startTimer();
+        showScreen('game-screen');
+    }
+
+    window.checkMath = (val) => {
+        if (parseInt(val) === state.mathAns) {
+            state.canAnswer = true;
+            document.querySelectorAll('.chaotic-btn').forEach(b => { b.disabled = false; b.style.opacity = "1"; });
+        }
+    };
+
+    window.checkHint = (val) => {
+        if (val.toLowerCase() === state.currentHint.toLowerCase()) {
+            const correctText = state.questions[state.currentQ].a[state.questions[state.currentQ].c];
+            document.querySelectorAll('.chaotic-btn').forEach(b => {
+                if (b.innerText === correctText) b.classList.add('hint-highlight');
+            });
+        }
+    };
+
+    function startTimer() {
+        let left = state.timeLimit;
+        const bar = document.getElementById('timer-bar');
+        clearInterval(timerRef);
+        timerRef = setInterval(() => {
+            left--;
+            bar.style.width = (left / state.timeLimit * 100) + "%";
+            if (left <= 0) {
+                clearInterval(timerRef);
+                state.canAnswer = false;
+                document.getElementById('wait-overlay').classList.add('active');
+                if (state.isHost) setTimeout(() => update(ref(db, `rooms/${state.roomCode}`), { status: 'leaderboard' }), 1000);
+            }
+        }, 1000);
+    }
+
+    window.nextQuestion = async () => {
+        const next = state.currentQ + 1;
+        if (next >= 20) return alert("END OF HISTORY!");
+        const pSnap = await get(ref(db, `rooms/${state.roomCode}/players`));
+        const players = pSnap.val();
+        for (let id in players) players[id].answered = false;
+        update(ref(db, `rooms/${state.roomCode}`), { status: 'question', currentQ: next, players });
+    };
+</script>
+</body>
+</html>
